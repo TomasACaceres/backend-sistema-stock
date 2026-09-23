@@ -94,20 +94,22 @@ def obtener_historial_ventas():
         conexion = obtener_conexion()
         cursor = conexion.cursor(dictionary=True)
 
+        # Convertimos fechaVenta a string ISO formateado desde MySQL
         query = """
             SELECT 
                 idVenta, 
-                fechaVenta, 
+                DATE_FORMAT(fechaVenta, '%Y-%m-%dT%H:%i:%s') AS fechaVenta, 
                 totalVenta, 
                 metodoPago 
             FROM venta 
-            ORDER BY fechaVenta DESC
+            ORDER BY idVenta DESC
         """
         cursor.execute(query)
         ventas = cursor.fetchall()
         return ventas
 
     except Exception as e:
+        print(f"Error interno en historial de ventas: {e}")
         raise HTTPException(status_code=500, detail=f"Error al obtener ventas: {str(e)}")
     finally:
         if cursor:
