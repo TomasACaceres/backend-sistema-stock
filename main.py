@@ -32,7 +32,7 @@ def get_db_connection():
         port=27198,
         user="avnadmin",
         password="AVNS_pPtJAnfFuVahbADPwFj",
-        database="defaultdb"
+        database="defaultdb",
         ssl_disabled=False
     )
 
