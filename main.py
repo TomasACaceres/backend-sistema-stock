@@ -11,7 +11,7 @@ from Routers.clientes import router as router_clientes
 # 1. Instanciar la aplicación
 app = FastAPI(title="Sistema de Stock y Ventas API")
 
-# 2. Configurar CORSuvicorn main:app --reload
+# 2. Configurar CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -57,13 +57,13 @@ def registrar_usuario(datos: UsuarioAuth):
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
         
-        # 1. Verificar si el usuario ya existe
-        cursor.execute("SELECT idUsuario FROM usuarios WHERE usuario = %s", (datos.usuario,))
+        # 1. Verificar si el usuario ya existe por nombreUsuario
+        cursor.execute("SELECT idUsuario FROM usuarios WHERE nombreUsuario = %s", (datos.usuario,))
         if cursor.fetchone():
             raise HTTPException(status_code=400, detail="El nombre de usuario ya está registrado.")
 
-        # 2. Insertar el nuevo usuario
-        query = "INSERT INTO usuarios (usuario, password) VALUES (%s, %s)"
+        # 2. Insertar el nuevo usuario usando nombreUsuario
+        query = "INSERT INTO usuarios (nombreUsuario, password) VALUES (%s, %s)"
         cursor.execute(query, (datos.usuario, datos.password))
         db.commit()
 
@@ -83,8 +83,8 @@ def login_usuario(datos: UsuarioAuth):
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
         
-        # 1. Traer el usuario solo por nombre para verificar si existe
-        query = "SELECT * FROM usuarios WHERE usuario = %s"
+        # 1. Traer el usuario solo por nombreUsuario
+        query = "SELECT * FROM usuarios WHERE nombreUsuario = %s"
         cursor.execute(query, (datos.usuario,))
         usuario_encontrado = cursor.fetchone()
 
@@ -101,10 +101,13 @@ def login_usuario(datos: UsuarioAuth):
         if pass_db != datos.password:
             return {"exito": False, "mensaje": "Usuario o contraseña incorrectos."}
 
+        # Obtenemos el nombre guardado (sea nombreUsuario o usuario)
+        nombre_usr = usuario_encontrado.get("nombreUsuario") or usuario_encontrado.get("usuario")
+
         return {
             "exito": True,
             "mensaje": "Inicio de sesión exitoso.",
-            "usuario": usuario_encontrado["usuario"]
+            "usuario": nombre_usr
         }
 
     except Exception as err:
