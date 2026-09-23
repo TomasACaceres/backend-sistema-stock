@@ -31,6 +31,11 @@ def obtener_mapeo_columnas(cursor):
         "stock_min": "stockMinimo" if "stockMinimo" in cols else ("stock_minimo" if "stock_minimo" in cols else "stockMinimo")
     }
 
+from fastapi import APIRouter, HTTPException
+from database import obtener_conexion
+
+router = APIRouter(prefix="/api/productos", tags=["Productos"])
+
 @router.get("")
 def listar_productos():
     conexion = None
@@ -38,30 +43,26 @@ def listar_productos():
     try:
         conexion = obtener_conexion()
         cursor = conexion.cursor(dictionary=True)
-        m = obtener_mapeo_columnas(cursor)
         
-        query = f"""
-            SELECT 
-                {m['id']} AS idProducto,
-                {m['codigo']} AS codigoBarras,
-                {m['nombre']} AS nombreProducto,
-                {m['categoria']} AS categoriaProducto,
-                {m['costo']} AS precioCosto,
-                {m['precio']} AS precioValor,
-                {m['stock']} AS stockActual,
-                {m['stock_min']} AS stockMinimo
-            FROM producto 
-            ORDER BY {m['id']} DESC
-        """
-        cursor.execute(query)
-        return cursor.fetchall()
+        # Obtenemos la lista real de columnas de la tabla producto
+        cursor.execute("DESCRIBE producto")
+        columnas_estructura = cursor.fetchall()
+        print("ESTRUCTURA REAL DE LA TABLA PRODUCTO:", columnas_estructura)
+        
+        # Traemos todas las filas
+        cursor.execute("SELECT * FROM producto")
+        productos = cursor.fetchall()
+        
+        return {
+            "estructura_columnas": columnas_estructura,
+            "productos": productos
+        }
     except Exception as e:
-        print(f"Error al listar productos: {e}")
-        raise HTTPException(status_code=500, detail=f"Error BD: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error leyendo la estructura: {str(e)}")
     finally:
         if cursor: cursor.close()
         if conexion and conexion.is_connected(): conexion.close()
-
+        
 @router.post("", status_code=201)
 def crear_producto(producto: ProductoSchema):
     conexion = None
