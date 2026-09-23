@@ -4,7 +4,6 @@ from database import obtener_conexion
 from pydantic import BaseModel
 from typing import Optional
 
-# Definición directa y tolerante de los esquemas para evitar errores de validación 422
 class ProductoSchema(BaseModel):
     codigoBarras: str
     nombreProducto: str
@@ -16,6 +15,22 @@ class ProductoSchema(BaseModel):
 
 router = APIRouter(prefix="/api/productos", tags=["Productos"])
 
+def obtener_mapeo_columnas(cursor):
+    """Detecta los nombres reales de las columnas en la tabla 'producto'"""
+    cursor.execute("DESCRIBE producto")
+    cols = [row["Field"] for row in cursor.fetchall()]
+    
+    return {
+        "id": "idProducto" if "idProducto" in cols else "id",
+        "codigo": "codigo" if "codigo" in cols else ("codigo_barras" if "codigo_barras" in cols else "codigoBarras"),
+        "nombre": "nombre" if "nombre" in cols else ("nombreProducto" if "nombreProducto" in cols else "nombre_producto"),
+        "categoria": "categoria" if "categoria" in cols else ("categoriaProducto" if "categoriaProducto" in cols else "categoria_producto"),
+        "costo": "precioCosto" if "precioCosto" in cols else ("precio_costo" if "precio_costo" in cols else "costo"),
+        "precio": "precio" if "precio" in cols else ("precioValor" if "precioValor" in cols else "precio_valor"),
+        "stock": "stockActual" if "stockActual" in cols else ("stock_actual" if "stock_actual" in cols else "stock"),
+        "stock_min": "stockMinimo" if "stockMinimo" in cols else ("stock_minimo" if "stock_minimo" in cols else "stockMinimo")
+    }
+
 @router.get("")
 def listar_productos():
     conexion = None
@@ -23,45 +38,26 @@ def listar_productos():
     try:
         conexion = obtener_conexion()
         cursor = conexion.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM producto ORDER BY idProducto DESC")
-        productos = cursor.fetchall()
-        return productos
-    except Exception as e:
-        print(f"Error interno al listar productos: {e}")
-        raise HTTPException(status_code=500, detail=f"Error BD: {str(e)}")
-    finally:
-        if cursor: cursor.close()
-        if conexion and conexion.is_connected(): conexion.close()
-
-@router.get("/codigo/{codigo}")
-def obtener_producto_por_codigo(codigo: str):
-    conexion = None
-    cursor = None
-    try:
-        conexion = obtener_conexion()
-        cursor = conexion.cursor(dictionary=True)
+        m = obtener_mapeo_columnas(cursor)
         
-        query = """
+        query = f"""
             SELECT 
-                idProducto, 
-                codigoBarras AS codigo, 
-                nombreProducto AS nombre, 
-                precioValor AS precio, 
-                stockActual AS stock 
+                {m['id']} AS idProducto,
+                {m['codigo']} AS codigoBarras,
+                {m['nombre']} AS nombreProducto,
+                {m['categoria']} AS categoriaProducto,
+                {m['costo']} AS precioCosto,
+                {m['precio']} AS precioValor,
+                {m['stock']} AS stockActual,
+                {m['stock_min']} AS stockMinimo
             FROM producto 
-            WHERE codigoBarras = %s
+            ORDER BY {m['id']} DESC
         """
-        cursor.execute(query, (codigo,))
-        producto = cursor.fetchone()
-
-        if not producto:
-            raise HTTPException(status_code=404, detail="Producto no encontrado.")
-
-        return producto
-    except HTTPException as he:
-        raise he
+        cursor.execute(query)
+        return cursor.fetchall()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error al listar productos: {e}")
+        raise HTTPException(status_code=500, detail=f"Error BD: {str(e)}")
     finally:
         if cursor: cursor.close()
         if conexion and conexion.is_connected(): conexion.close()
@@ -72,9 +68,12 @@ def crear_producto(producto: ProductoSchema):
     cursor = None
     try:
         conexion = obtener_conexion()
-        cursor = conexion.cursor()
-        query = """
-            INSERT INTO producto (codigoBarras, nombreProducto, categoriaProducto, precioCosto, precioValor, stockActual, stockMinimo)
+        cursor = conexion.cursor(dictionary=True)
+        m = obtener_mapeo_columnas(cursor)
+        
+        query = f"""
+            INSERT INTO producto 
+            ({m['codigo']}, {m['nombre']}, {m['categoria']}, {m['costo']}, {m['precio']}, {m['stock']}, {m['stock_min']})
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
         valores = (
@@ -88,19 +87,14 @@ def crear_producto(producto: ProductoSchema):
         )
         cursor.execute(query, valores)
         conexion.commit()
-        nuevo_id = cursor.lastrowid
-        return {"mensaje": "Producto creado exitosamente", "idProducto": nuevo_id}
+        return {"mensaje": "Producto creado exitosamente", "idProducto": cursor.lastrowid}
     except mysql.connector.Error as err:
-        if conexion and conexion.is_connected():
-            conexion.rollback()
+        if conexion and conexion.is_connected(): conexion.rollback()
         if err.errno == 1062:
             raise HTTPException(status_code=400, detail="El código de barras ya está registrado.")
-        print(f"Error MySQL: {err}")
         raise HTTPException(status_code=500, detail=f"Error en MySQL: {err.msg}")
     except Exception as e:
-        if conexion and conexion.is_connected():
-            conexion.rollback()
-        print(f"Error interno: {e}")
+        if conexion and conexion.is_connected(): conexion.rollback()
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
     finally:
         if cursor: cursor.close()
@@ -112,35 +106,24 @@ def actualizar_producto(id_producto: int, producto: ProductoSchema):
     cursor = None
     try:
         conexion = obtener_conexion()
-        cursor = conexion.cursor()
-        query = """
+        cursor = conexion.cursor(dictionary=True)
+        m = obtener_mapeo_columnas(cursor)
+        
+        query = f"""
             UPDATE producto 
-            SET codigoBarras = %s, nombreProducto = %s, categoriaProducto = %s, precioCosto = %s, 
-                precioValor = %s, stockActual = %s, stockMinimo = %s
-            WHERE idProducto = %s
+            SET {m['codigo']} = %s, {m['nombre']} = %s, {m['categoria']} = %s, 
+                {m['costo']} = %s, {m['precio']} = %s, {m['stock']} = %s, {m['stock_min']} = %s
+            WHERE {m['id']} = %s
         """
         valores = (
-            producto.codigoBarras, producto.nombreProducto, producto.categoriaProducto, producto.precioCosto,
-            producto.precioValor, producto.stockActual, producto.stockMinimo, id_producto
+            producto.codigoBarras, producto.nombreProducto, producto.categoriaProducto,
+            producto.precioCosto, producto.precioValor, producto.stockActual, producto.stockMinimo, id_producto
         )
         cursor.execute(query, valores)
         conexion.commit()
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Producto no encontrado")
         return {"mensaje": f"Producto con ID {id_producto} actualizado correctamente"}
-    except mysql.connector.Error as err:
-        if conexion and conexion.is_connected():
-            conexion.rollback()
-        if err.errno == 1062:
-            raise HTTPException(status_code=400, detail="El código de barras ya pertenece a otro producto.")
-        print(f"Error MySQL: {err}")
-        raise HTTPException(status_code=500, detail=f"Error en MySQL: {err.msg}")
-    except HTTPException as he:
-        raise he
     except Exception as e:
-        if conexion and conexion.is_connected():
-            conexion.rollback()
-        print(f"Error interno: {e}")
+        if conexion and conexion.is_connected(): conexion.rollback()
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
     finally:
         if cursor: cursor.close()
@@ -152,19 +135,15 @@ def eliminar_producto(id_producto: int):
     cursor = None
     try:
         conexion = obtener_conexion()
-        cursor = conexion.cursor()
-        cursor.execute("DELETE FROM producto WHERE idProducto = %s", (id_producto,))
+        cursor = conexion.cursor(dictionary=True)
+        m = obtener_mapeo_columnas(cursor)
+        
+        cursor.execute(f"DELETE FROM producto WHERE {m['id']} = %s", (id_producto,))
         conexion.commit()
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Producto no encontrado")
-        return {"mensaje": f"Producto con ID {id_producto} eliminado correctamente"}
-    except HTTPException as he:
-        raise he
+        return {"mensaje": f"Producto eliminado correctamente"}
     except Exception as e:
-        if conexion and conexion.is_connected():
-            conexion.rollback()
-        print(f"Error interno: {e}")
-        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+        if conexion and conexion.is_connected(): conexion.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al eliminar: {str(e)}")
     finally:
         if cursor: cursor.close()
-        if conexion and conexion.is_connected(): conexion.close()
+        if conexion and conexion.is_connected(): conexion.close()<
