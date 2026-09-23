@@ -29,7 +29,7 @@ app.include_router(router_clientes)
 def get_db_connection():
     return mysql.connector.connect(
         host="proyecto-stock-ventas-caceresta3-0852.h.aivencloud.com",
-        port=27198
+        port=27198,
         user="avnadmin",
         password="AVNS_pPtJAnfFuVahbADPwFj",
         database="defaultdb"
