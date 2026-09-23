@@ -1,22 +1,30 @@
 import os
 import mysql.connector
 from mysql.connector import pooling, Error
-# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# Variables con valores por defecto hacia Aiven si no existen en el .env
+DB_HOST = os.getenv("DB_HOST", "proyecto-stock-ventas-caceresta3-0852.h.aivencloud.com")
+DB_USER = os.getenv("DB_USER", "avnadmin")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "AVNS_pPtJAnfFuVahbADPwFj")
+DB_NAME = os.getenv("DB_NAME", "defaultdb")
+DB_PORT = int(os.getenv("DB_PORT", 27198))
+
 try:
-    # Pool de conexiones para no abrir/cerrar sockets físicos en cada request
+    # Pool de conexiones configurado con el puerto 27198 de Aiven
     db_pool = mysql.connector.pooling.MySQLConnectionPool(
         pool_name="stock_pool",
         pool_size=5,
         pool_reset_session=True,
-        host=os.getenv("DB_HOST", "localhost"),
-        user=os.getenv("DB_USER", "root"),
-        password=os.getenv("DB_PASSWORD", ""),
-        database=os.getenv("DB_NAME", "sistema_stock")
+        host=DB_HOST,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        database=DB_NAME,
+        port=DB_PORT
     )
+    print("Pool de conexiones inicializado correctamente.")
 except Error as e:
     print(f"Error al inicializar el pool de conexiones: {e}")
     raise e
