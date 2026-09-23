@@ -57,13 +57,13 @@ def registrar_usuario(datos: UsuarioAuth):
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
         
-        # 1. Verificar si el usuario ya existe por nombreUsuario
+        # 1. Verificar si el usuario ya existe
         cursor.execute("SELECT idUsuario FROM usuarios WHERE nombreUsuario = %s", (datos.usuario,))
         if cursor.fetchone():
             raise HTTPException(status_code=400, detail="El nombre de usuario ya está registrado.")
 
-        # 2. Insertar el nuevo usuario usando nombreUsuario
-        query = "INSERT INTO usuarios (nombreUsuario, password) VALUES (%s, %s)"
+        # 2. Insertar el nuevo usuario usando las columnas exactas: nombreUsuario y passwordUsuario
+        query = "INSERT INTO usuarios (nombreUsuario, passwordUsuario) VALUES (%s, %s)"
         cursor.execute(query, (datos.usuario, datos.password))
         db.commit()
 
@@ -83,7 +83,7 @@ def login_usuario(datos: UsuarioAuth):
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
         
-        # 1. Traer el usuario solo por nombreUsuario
+        # 1. Traer el usuario filtrando por nombreUsuario
         query = "SELECT * FROM usuarios WHERE nombreUsuario = %s"
         cursor.execute(query, (datos.usuario,))
         usuario_encontrado = cursor.fetchone()
@@ -95,19 +95,16 @@ def login_usuario(datos: UsuarioAuth):
         if not usuario_encontrado:
             return {"exito": False, "mensaje": "Usuario o contraseña incorrectos."}
 
-        # 2. Verificar la contraseña en Python
-        pass_db = usuario_encontrado.get("password") or usuario_encontrado.get("clave") or usuario_encontrado.get("pass")
+        # 2. Verificar la contraseña usando la columna 'passwordUsuario'
+        pass_db = usuario_encontrado.get("passwordUsuario")
 
         if pass_db != datos.password:
             return {"exito": False, "mensaje": "Usuario o contraseña incorrectos."}
 
-        # Obtenemos el nombre guardado (sea nombreUsuario o usuario)
-        nombre_usr = usuario_encontrado.get("nombreUsuario") or usuario_encontrado.get("usuario")
-
         return {
             "exito": True,
             "mensaje": "Inicio de sesión exitoso.",
-            "usuario": nombre_usr
+            "usuario": usuario_encontrado["nombreUsuario"]
         }
 
     except Exception as err:
