@@ -94,23 +94,38 @@ def obtener_historial_ventas():
         conexion = obtener_conexion()
         cursor = conexion.cursor(dictionary=True)
 
-        # Convertimos fechaVenta a string ISO formateado desde MySQL
-        query = """
-            SELECT 
-                idVenta, 
-                DATE_FORMAT(fechaVenta, '%Y-%m-%dT%H:%i:%s') AS fechaVenta, 
-                totalVenta, 
-                metodoPago 
-            FROM venta 
-            ORDER BY idVenta DESC
-        """
-        cursor.execute(query)
-        ventas = cursor.fetchall()
-        return ventas
+        # 1. Intentamos consultar la tabla en plural 'ventas' (según la estructura original del script SQL)
+        try:
+            query = """
+                SELECT 
+                    idVenta, 
+                    DATE_FORMAT(fecha, '%Y-%m-%dT%H:%i:%s') AS fechaVenta, 
+                    total AS totalVenta, 
+                    metodoPago 
+                FROM ventas 
+                ORDER BY idVenta DESC
+            """
+            cursor.execute(query)
+            ventas = cursor.fetchall()
+            return ventas
+        except Exception:
+            # 2. Si falla porque la tabla se llama 'venta' (singular), ejecutamos el fallback
+            query_fallback = """
+                SELECT 
+                    idVenta, 
+                    DATE_FORMAT(fechaVenta, '%Y-%m-%dT%H:%i:%s') AS fechaVenta, 
+                    totalVenta, 
+                    metodoPago 
+                FROM venta 
+                ORDER BY idVenta DESC
+            """
+            cursor.execute(query_fallback)
+            ventas = cursor.fetchall()
+            return ventas
 
     except Exception as e:
-        print(f"Error interno en historial de ventas: {e}")
-        raise HTTPException(status_code=500, detail=f"Error al obtener ventas: {str(e)}")
+        print(f"Error crítico en backend historial ventas: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error en la BD: {str(e)}")
     finally:
         if cursor:
             cursor.close()
